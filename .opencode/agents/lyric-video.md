@@ -39,7 +39,8 @@ Extract the `words` array from the response. Filter to only `type: "word"` entri
    - genre: string like "pop", "rock", "hip-hop", "electronic", "folk", "r&b", etc.
    - energy: number 0.0 to 1.0
 4. Use the `load skill song-analysis` for detailed guidance on vibe analysis.
-5. Write the result to `songs/<folder>/theme.json` with these fields plus fill in a full ThemeConfig.
+5. Use the `load skill theme-design` and fill in a full ThemeConfig, **including a `choreography` block** — a unique set of 3-6 music-dance elements (rings/bars/orbiters/burst/waves/glow) designed for this specific song so the visuals dance with the music. See the theme-design skill for the vocabulary and creative rules.
+6. Write the result to `songs/<folder>/theme.json`.
 
 ### Step 4: Generate background image
 1. Create an image prompt from the song's mood/genre/lyrical themes. Include atmosphere, color scheme, visual style.

@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WIDTH = 1920;
 const HEIGHT = 1080;
+const FRAME_RATE = 30;
 
 const DEFAULTS = {
   fps: 30,
@@ -68,13 +69,20 @@ const DEFAULTS = {
     saturation: 1.4,
     overlayOpacity: 0.3,
   },
+  // Per-song music-dance elements designed by the LLM (see theme-design skill).
+  // Each element: { type, band, position, count, colors, ...type-specific }
+  choreography: {
+    elements: [],
+  },
 };
 
 const ENTRANCE = {
-  spring: { ease: "elastic.out(1, 0.45)", y: 18, scale: 0.7 },
-  "scale-pop": { ease: "back.out(1.7)", y: 0, scale: 0.5 },
-  fade: { ease: "power1.out", y: 0, scale: 1 },
-  "slide-up": { ease: "power2.out", y: 26, scale: 1 },
+  // wordEase is per-word (fast, restrained); chunkEase is the chunk container
+  // entrance (where the bounce/character lives).
+  spring: { wordEase: "power2.out", chunkEase: "elastic.out(1, 0.45)", y: 0, scale: 0.85 },
+  "scale-pop": { wordEase: "power1.out", chunkEase: "back.out(1.7)", y: 0, scale: 0.85 },
+  fade: { wordEase: "power1.out", chunkEase: "power2.out", y: 0, scale: 1 },
+  "slide-up": { wordEase: "power1.out", chunkEase: "power3.out", y: 26, scale: 1 },
 };
 
 const SHAPE_CSS = {
@@ -119,7 +127,7 @@ function mergeTheme(t) {
   if (!t || typeof t !== "object") return structuredClone(DEFAULTS);
   const out = structuredClone(DEFAULTS);
   for (const k of ["fps", "mood", "genre", "energy"]) if (t[k] != null) out[k] = t[k];
-  for (const k of ["colors", "typography", "animation", "particles", "background"]) {
+  for (const k of ["colors", "typography", "animation", "particles", "background", "choreography"]) {
     if (t[k] && typeof t[k] === "object") out[k] = { ...out[k], ...t[k] };
   }
   return out;
@@ -143,6 +151,44 @@ function hashSeed(str) {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
+}
+
+// Resample a band array to a target rate (Hz) via linear interpolation.
+function resampleToRate(arr, targetCount) {
+  if (!arr || arr.length === 0) return [];
+  if (arr.length === 1) return Array(targetCount).fill(arr[0]);
+  const out = [];
+  for (let i = 0; i < targetCount; i++) {
+    const t = (i / (targetCount - 1)) * (arr.length - 1);
+    const i0 = Math.floor(t);
+    const i1 = Math.min(arr.length - 1, i0 + 1);
+    const f = t - i0;
+    out.push(arr[i0] + (arr[i1] - arr[i0]) * f);
+  }
+  return out;
+}
+
+// Renormalize a band so its 90th percentile maps to ~1.0 with a small floor,
+// so steady songs still pulse instead of staying pegged at the global max.
+function renormalize(arr) {
+  if (!arr || arr.length === 0) return arr;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const p90 = sorted[Math.min(arr.length - 1, Math.floor(arr.length * 0.9))] || 1e-6;
+  const scale = 1 / Math.max(p90, 1e-6);
+  return arr.map((v) => {
+    const n = v * scale;
+    return Math.min(1, Math.max(0.06, n));
+  });
+}
+
+// Resample all bands to the video frame rate (1 step per frame = no staircase).
+function smoothEnergy(energyData, targetRate) {
+  const targetCount = Math.max(1, Math.round((energyData.duration || 0) * targetRate));
+  const out = { ...energyData, sampleRate: targetRate };
+  for (const band of ["bass", "mid", "high"]) {
+    out[band] = renormalize(resampleToRate(energyData[band] || [], targetCount));
+  }
+  return out;
 }
 
 function hexToRgba(hex, alpha) {
@@ -224,9 +270,173 @@ function buildParticles(theme, seedStr) {
       dy: Math.round((rand() - 0.5) * speed * 60 - 40),
       rot,
       geometric: shape === "geometric",
+      // Drift duration variance (75%-125% of song) so particles don't move in lockstep
+      driftDur: +(0.75 + rand() * 0.5).toFixed(2),
+      // Floating bob (child span y yoyo)
+      floatY: +(4 + rand() * 14).toFixed(1),
+      floatDur: +(1.4 + rand() * 3.2).toFixed(2),
+      // Twinkle (child span opacity yoyo)
+      twinkleAmp: +(0.15 + rand() * 0.4).toFixed(2),
+      twinkleDur: +(1.0 + rand() * 2.5).toFixed(2),
     });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Choreography: per-song music-dance elements designed by the LLM in theme.json.
+// Each element type renders deterministic HTML/CSS driven by the energy CSS vars
+// (--bass/--mid/--high) plus optional GSAP loops, so every song dances uniquely.
+// ---------------------------------------------------------------------------
+
+const BAND_VAR = { bass: "var(--bass)", mid: "var(--mid)", high: "var(--high)" };
+
+// Element layout positions (applied to the wrapper div).
+const CHOREO_POS = {
+  center: "left:50%;top:50%;",
+  top: "left:50%;top:16%;",
+  bottom: "left:50%;top:86%;",
+  left: "left:10%;top:50%;",
+  right: "left:90%;top:50%;",
+};
+
+// Build per-element CSS using the requested band var.
+function bandVar(band) {
+  return BAND_VAR[band] ?? "var(--mid)";
+}
+
+function choreoElement(el, idx) {
+  const id = `choreo-${idx}`;
+  const bv = bandVar(el.band);
+  const pos = CHOREO_POS[el.position] ?? CHOREO_POS.center;
+  const colors = el.colors?.length ? el.colors : ["#ffffff"];
+  const color = (i) => colors[i % colors.length];
+  const count = Math.max(2, Math.min(64, el.count ?? 8));
+
+  switch (el.type) {
+    case "rings": {
+      const maxSize = el.size ?? 520;
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const size = Math.round((maxSize * (i + 1)) / count);
+        const f = ((i + 1) / count).toFixed(3);
+        const op = Math.max(0.05, 0.75 - i * (0.55 / count)).toFixed(2);
+        items.push(
+          `<span class="ch-ring" style="--cs:${size}px;--cf:${f};--co:${op};--cc:${color(i)}"></span>`,
+        );
+      }
+      return {
+        html: `<div id="${id}" class="choreo-el" style="${pos}">${items.join("")}</div>`,
+        css: `#${id} .ch-ring{position:absolute;left:50%;top:50%;width:var(--cs);height:var(--cs);margin:-50% 0 0 -50%;border-radius:50%;border:2px solid var(--cc);opacity:var(--co);transform:scale(calc(var(--cf) * (0.35 + ${bv} * 0.85)));will-change:transform;}`,
+        tweens: "",
+      };
+    }
+
+    case "bars": {
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const h = Math.round(40 + (i % 5) * 34);
+        const f = +(0.45 + ((i * 37) % 60) / 100).toFixed(2);
+        items.push(
+          `<span class="ch-bar" style="--ch:${h}px;--cf:${f};--cc:${color(i)}"></span>`,
+        );
+      }
+      const vertical = el.vertical ? "ch-bars-v" : "";
+      return {
+        html: `<div id="${id}" class="choreo-el ch-bars ${vertical}" style="${pos}">${items.join("")}</div>`,
+        css: `#${id}.ch-bars{position:absolute;display:flex;align-items:flex-end;gap:4px;transform:translateX(-50%);}` +
+          `#${id} .ch-bar{flex:1;height:var(--ch);background:linear-gradient(180deg,var(--cc),transparent);transform-origin:bottom;transform:scaleY(calc(var(--cf) * (0.06 + ${bv} * 0.95)));border-radius:2px;opacity:0.75;will-change:transform;}` +
+          `#${id}.ch-bars-v{transform:translateX(-50%) rotate(90deg);}`,
+        tweens: "",
+      };
+    }
+
+    case "orbiters": {
+      const radius = el.radius ?? 380;
+      const speed = Math.max(4, el.speed ?? 20);
+      const dotSize = el.dotSize ?? 8;
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const ang = Math.round((360 / count) * i);
+        items.push(
+          `<span class="ch-orb-dot" style="--ca:${ang}deg;--cd:${dotSize}px;--cc:${color(i)}"></span>`,
+        );
+      }
+      return {
+        html: `<div id="${id}" class="choreo-el" style="${pos}"><div class="ch-orb-rot">${items.join("")}</div></div>`,
+        css: `#${id} .ch-orb-rot{width:0;height:0;}` +
+          `#${id} .ch-orb-dot{position:absolute;left:0;top:0;width:var(--cd);height:var(--cd);margin:calc(var(--cd)/-2) 0 0 calc(var(--cd)/-2);border-radius:50%;background:var(--cc);transform:rotate(var(--ca)) translateX(${radius}px) scale(calc(0.45 + ${bv} * 0.8));box-shadow:0 0 calc(var(--cd) * 2) var(--cc);will-change:transform;}`,
+        tweens: `tl.to("#${id} .ch-orb-rot",{rotation:360,duration:${speed},repeat:-1,ease:"none"},0);`,
+      };
+    }
+
+    case "burst": {
+      const radius = el.radius ?? 90;
+      const len = el.len ?? 120;
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const ang = Math.round((360 / count) * i);
+        items.push(
+          `<span class="ch-burst-ray" style="--ca:${ang}deg;--cl:${len}px;--cc:${color(i)}"></span>`,
+        );
+      }
+      return {
+        html: `<div id="${id}" class="choreo-el" style="${pos}">${items.join("")}</div>`,
+        css: `#${id} .ch-burst-ray{position:absolute;left:50%;top:50%;width:var(--cl);height:3px;transform-origin:left center;transform:rotate(var(--ca)) translateX(calc(var(--cl) / 2)) scaleX(calc(0.25 + ${bv} * 1));background:linear-gradient(90deg,var(--cc),transparent);border-radius:2px;opacity:0.8;will-change:transform;}`,
+        tweens: `tl.to("#${id}",{rotation:180,duration:${Math.max(8, el.speed ?? 24)},repeat:-1,ease:"none"},0);`,
+      };
+    }
+
+    case "waves": {
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const f = +(0.4 + ((i * 53) % 70) / 100).toFixed(2);
+        items.push(
+          `<span class="ch-wave" style="--cf:${f};--cc:${color(i)}"></span>`,
+        );
+      }
+      return {
+        html: `<div id="${id}" class="choreo-el ch-waves" style="${pos}">${items.join("")}</div>`,
+        css: `#${id}.ch-waves{position:absolute;display:flex;align-items:center;gap:3px;transform:translateX(-50%);}` +
+          `#${id} .ch-wave{flex:1;height:150px;transform-origin:center;transform:scaleY(calc(var(--cf) * (0.05 + ${bv} * 1)));background:linear-gradient(180deg,var(--cc),transparent);border-radius:2px;opacity:0.55;will-change:transform;}`,
+        tweens: "",
+      };
+    }
+
+    case "glow": {
+      const r = Math.max(90, el.radius ?? 240);
+      return {
+        html: `<div id="${id}" class="choreo-el ch-glow" style="${pos}--cs:${r}px;--cc:${color(0)}"></div>`,
+        css: `#${id}.ch-glow{position:absolute;width:var(--cs);height:var(--cs);margin:calc(var(--cs)/-2) 0 0 calc(var(--cs)/-2);border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--cc) 55%,transparent) 0%,transparent 70%);transform:scale(calc(0.6 + ${bv} * 0.9));opacity:calc(0.18 + ${bv} * 0.4);filter:blur(30px);pointer-events:none;will-change:transform,opacity;}`,
+        tweens: "",
+      };
+    }
+
+    default:
+      return null;
+  }
+}
+
+function buildChoreography(theme, dur) {
+  const elements = Array.isArray(theme.choreography?.elements)
+    ? theme.choreography.elements
+    : [];
+  const html = [];
+  const css = [];
+  const tweens = [];
+  elements.forEach((el, idx) => {
+    const out = choreoElement(el, idx);
+    if (!out) return;
+    html.push(out.html);
+    css.push(out.css);
+    if (out.tweens) tweens.push(out.tweens);
+  });
+  const baseCss = css.length ? ".choreo-el{position:absolute;pointer-events:none;will-change:transform,opacity;}" : "";
+  return {
+    html: html.join("\n      "),
+    css: [baseCss, ...css].join("\n      "),
+    tweens: tweens.join("\n        "),
+  };
 }
 
 async function main() {
@@ -258,7 +468,7 @@ async function main() {
     .filter((w) => !w.type || w.type === "word");
 
   const theme = mergeTheme(JSON.parse(themeRaw));
-  const energyData = JSON.parse(energyRaw);
+  const energyData = smoothEnergy(JSON.parse(energyRaw), FRAME_RATE);
 
   const dur = Math.max(energyData.duration ?? 0, words.length ? words[words.length - 1].end + 3 : 0);
 
@@ -280,9 +490,9 @@ async function main() {
     }),
   ]);
 
-  const indexHtml = renderIndex({ theme, dur, particles, energyData, songId });
+  const choreo = buildChoreography(theme, dur);
+  const indexHtml = renderIndex({ theme, dur, particles, energyData, songId, choreo });
   const lyricsHtml = renderLyrics({ theme, words, chunks, chunkWin, dur });
-
   await Promise.all([
     fs.writeFile(path.join(ROOT, "index.html"), indexHtml),
     fs.writeFile(path.join(ROOT, "compositions", "lyrics.html"), lyricsHtml),
@@ -306,7 +516,7 @@ async function main() {
   );
 }
 
-function renderIndex({ theme, dur, particles, energyData, songId }) {
+function renderIndex({ theme, dur, particles, energyData, songId, choreo }) {
   const t = theme.typography;
   const c = theme.colors;
   const bg = theme.background;
@@ -323,8 +533,8 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
     .map(
       (p) =>
         `<div class="particle" id="p-${p.i}" style="left:${p.x}px;top:${p.y}px;">` +
-        `<span class="p-inner ${p.shapeClass} ${p.reactClass}" ` +
-        `style="--psize:${p.size}px;--pcolor:${p.color};--phalo:${p.halo};--pglow:${p.glow}px;--po:${p.opacity};"></span></div>`,
+        `<span class="p-float"><span class="p-inner ${p.shapeClass} ${p.reactClass}" ` +
+        `style="--psize:${p.size}px;--pcolor:${p.color};--phalo:${p.halo};--pglow:${p.glow}px;--po:${p.opacity};"></span></span></div>`,
     )
     .join("\n      ");
 
@@ -332,8 +542,16 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
     .map((p) => {
       const base = `tl.to("#p-${p.i}",{x:${p.dx},y:${p.dy}`;
       const end = p.geometric ? `,rotation:${p.rot.toFixed(0)}` : "";
-      return `${base}${end},duration:${dur.toFixed(3)},ease:"none"},0);`;
+      return `${base}${end},duration:${(dur * p.driftDur).toFixed(3)},ease:"none"},0);`;
     })
+    .join("\n        ");
+
+  const floatLines = particles
+    .map(
+      (p) =>
+        `tl.to("#p-${p.i} .p-float",{y:${p.floatY},duration:${p.floatDur},repeat:-1,yoyo:true,ease:"sine.inOut"},0);\n        ` +
+        `tl.to("#p-${p.i} .p-float",{opacity:${(1 - p.twinkleAmp).toFixed(2)},duration:${p.twinkleDur},repeat:-1,yoyo:true,ease:"sine.inOut"},0);`,
+    )
     .join("\n        ");
 
   const overlayStart = hexToRgba(c.background, bg.overlayOpacity);
@@ -375,6 +593,7 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
       }
       #particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
       .particle { position: absolute; width: 0; height: 0; will-change: transform; }
+      .p-float { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform, opacity; }
       .p-inner {
         position: absolute;
         left: 0; top: 0;
@@ -399,6 +618,7 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
       .p-react-bass { transform: scale(calc(0.7 + var(--bass, 0) * 1.4)); opacity: calc(var(--po) * (0.35 + var(--mid, 0) * 0.6)); }
       .p-react-mid  { transform: scale(calc(0.8 + var(--mid, 0) * 0.9)); opacity: calc(var(--po) * (0.3 + var(--high, 0) * 0.55)); }
       .p-react-soft { transform: scale(calc(0.9 + var(--mid, 0) * 0.5)); opacity: calc(var(--po) * (0.35 + var(--high, 0) * 0.4)); }
+      ${choreo.css}
     </style>
   </head>
   <body>
@@ -411,6 +631,7 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
 
       <div id="particles" class="clip" data-start="0" data-duration="${dur.toFixed(3)}" data-track-index="3">
       ${particlesHtml}
+      ${choreo.html}
       </div>
 
       <div id="lyrics-host" data-composition-id="lyrics" data-composition-src="compositions/lyrics.html"
@@ -439,6 +660,12 @@ function renderIndex({ theme, dur, particles, energyData, songId }) {
 
           // Particle drift
         ${driftLines}
+
+          // Particle float + twinkle (child span, so drift and pulse stay independent)
+        ${floatLines}
+
+          // Choreography loops (orbit rotation, burst spin)
+        ${choreo.tweens}
 
           // Extend the timeline to the full song duration
           tl.set({}, {}, ${dur.toFixed(3)});
@@ -474,6 +701,7 @@ function renderLyrics({ theme, words, chunks, chunkWin, dur }) {
 
   const fontLink = googleFontLink(t.fontFamily, t.fontWeight);
   const activeGlow = (t.activeWordGlow ?? "").replace(/currentColor/g, c.accent);
+  const activeColor = c.accent;
 
   return `<template id="lyrics-template">
   <div data-composition-id="lyrics" data-width="${WIDTH}" data-height="${HEIGHT}">
@@ -516,7 +744,14 @@ function renderLyrics({ theme, words, chunks, chunkWin, dur }) {
         white-space: pre;
         opacity: 0;
         color: ${c.text};
-        will-change: transform, opacity, text-shadow;
+        will-change: transform, opacity, color, text-shadow;
+      }
+      /* Inner span carries the mid-band reactive pulse so the active word
+         literally dances with the music (scale follows var(--mid)). */
+      .lyric-inner {
+        display: inline-block;
+        transform: scale(calc(1 + (var(--mid, 0.35) - 0.35) * 0.5));
+        will-change: transform;
       }
     </style>
     <div id="lyrics-layer"></div>
@@ -527,8 +762,10 @@ function renderLyrics({ theme, words, chunks, chunkWin, dur }) {
         var cfg = {
           activeScale: ${t.activeWordScale},
           activeGlow: ${JSON.stringify(activeGlow)},
+          activeColor: ${JSON.stringify(activeColor)},
           textColor: ${JSON.stringify(c.text)},
-          entranceEase: ${JSON.stringify(entrance.ease)},
+          wordEase: ${JSON.stringify(entrance.wordEase)},
+          chunkEase: ${JSON.stringify(entrance.chunkEase)},
           entranceY: ${entrance.y},
           entranceScale: ${entrance.scale},
           entranceDur: ${entranceDur}
@@ -549,34 +786,41 @@ function renderLyrics({ theme, words, chunks, chunkWin, dur }) {
             var span = document.createElement("span");
             span.className = "lyric-word";
             span.id = "w-" + wi;
-            span.textContent = word.text;
+            var inner = document.createElement("span");
+            inner.className = "lyric-inner";
+            inner.textContent = word.text;
+            span.appendChild(inner);
             div.appendChild(span);
 
-            var dur = Math.max(0.08, Math.min(cfg.entranceDur, word.end - word.start - 0.05));
-            var highlightAt = Math.min(word.start + dur, Math.max(word.start + 0.05, word.end - 0.1));
+            var dur = Math.max(0.06, Math.min(cfg.entranceDur, word.end - word.start - 0.05));
+            var highlightAt = Math.min(word.start + dur, Math.max(word.start + 0.05, word.end - 0.08));
 
+            // Entrance: fade in, no bounce (bounce lives on the chunk).
             tl.fromTo(
               span,
               { opacity: 0, y: cfg.entranceY, scale: cfg.entranceScale },
-              { opacity: 0.35, y: 0, scale: 1, duration: dur, ease: cfg.entranceEase },
+              { opacity: 0.35, y: 0, scale: 1, duration: dur, ease: cfg.wordEase },
               word.start
             );
+            // Active: scale up, pop the accent color + glow.
             tl.to(
               span,
-              { opacity: 1, scale: cfg.activeScale, textShadow: cfg.activeGlow, duration: 0.12, ease: "power1.out" },
+              { opacity: 1, scale: cfg.activeScale, color: cfg.activeColor, textShadow: cfg.activeGlow, duration: 0.1, ease: "power1.out" },
               highlightAt
             );
+            // Dim back toward "spoken" look, restore color.
             tl.to(
               span,
-              { opacity: 0.35, scale: 1, textShadow: "none", duration: 0.25, ease: "power1.out" },
+              { opacity: 0.35, scale: 1, color: cfg.textColor, textShadow: "none", duration: 0.25, ease: "power1.out" },
               Math.min(word.end, chunk.end)
             );
           });
 
+          // Chunk entrance carries the mood's bounce (back/elastic/power).
           tl.fromTo(
             div,
-            { opacity: 0, y: 26 },
-            { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" },
+            { opacity: 0, y: cfg.entranceY },
+            { opacity: 1, y: 0, duration: 0.5, ease: cfg.chunkEase },
             chunk.start
           );
           tl.to(div, { opacity: 0, y: -26, duration: 0.35, ease: "power2.in" }, chunk.end - 0.2);

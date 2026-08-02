@@ -39,6 +39,7 @@ opencode
 - **STT error correction** — Web search finds real lyrics, diffs against transcription, preserves timestamps
 - **AI-generated backgrounds** — Pollinations free API generates images from song vibe
 - **Audio-reactive particles** — Precomputed 3-band energy drives DOM particle CSS
+- **Per-song choreography** — LLM-designed music-dance elements (rings, orbiters, bursts, bars, waves, glow) that dance with the song's energy bands
 - **Dynamic typography** — Fonts, colors, animations adapt to song mood
 - **5 vibe presets** — Energetic, Melancholic, Aggressive, Dreamy, Romantic
 

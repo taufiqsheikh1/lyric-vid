@@ -7,6 +7,7 @@ An AI-powered system that generates lyric music videos using Hyperframes, Eleven
 This project creates dynamic lyric videos with:
 - AI-generated background images based on song vibe
 - Audio-reactive particle effects (precomputed energy bands)
+- Per-song music-dance choreography (LLM-designed rings, orbiters, bursts, bars, waves, glow)
 - Word-level synchronized lyrics with animated typography
 - Dynamic theming (colors, fonts, animations) based on song mood
 
