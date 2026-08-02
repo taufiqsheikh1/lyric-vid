@@ -1,23 +1,17 @@
 {
   "name": "lyric-vid",
-  "version": "1.0.0",
-  "description": "AI-powered lyric video generator using Remotion + ElevenLabs + Pollinations",
+  "version": "2.0.0",
+  "description": "AI-powered lyric video generator using Hyperframes + ElevenLabs + Pollinations",
   "scripts": {
-    "start": "remotion studio",
-    "build": "remotion render src/index.ts LyricVideo",
-    "preview": "remotion preview"
-  },
-  "dependencies": {
-    "@remotion/bundler": "^4.0.0",
-    "@remotion/cli": "^4.0.0",
-    "@remotion/media-utils": "^4.0.0",
-    "@remotion/renderer": "^4.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "remotion": "^4.0.0"
+    "analyze": "node scripts/analyze-audio.mjs",
+    "build": "node scripts/build-composition.mjs",
+    "generate": "node scripts/generate.mjs",
+    "preview": "hyperframes preview",
+    "lint": "hyperframes lint",
+    "check": "hyperframes check",
+    "render": "hyperframes render"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "typescript": "^5.5.0"
+    "hyperframes": "^0.7.88"
   }
 }

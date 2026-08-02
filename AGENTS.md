@@ -1,12 +1,12 @@
 # Lyric Video Generator
 
-An AI-powered system that generates lyric music videos using Remotion, ElevenLabs STT, and Pollinations AI.
+An AI-powered system that generates lyric music videos using Hyperframes, ElevenLabs STT, and Pollinations AI.
 
 ## Project Overview
 
 This project creates dynamic lyric videos with:
 - AI-generated background images based on song vibe
-- Audio-reactive particle effects
+- Audio-reactive particle effects (precomputed energy bands)
 - Word-level synchronized lyrics with animated typography
 - Dynamic theming (colors, fonts, animations) based on song mood
 
@@ -25,7 +25,8 @@ This project creates dynamic lyric videos with:
    - Search the internet for correct lyrics and fix STT errors
    - Analyze song vibe (mood, genre, energy)
    - Generate AI background image with Pollinations
-   - Render the final MP4 video with Remotion
+   - Analyze audio into bass/mid/high energy bands
+   - Generate the Hyperframes composition and render the final MP4 video
 
 ## Architecture
 
@@ -38,14 +39,17 @@ LLM analysis → vibe (mood/genre/energy/colors)
      ↓
 Pollinations API → AI background image
      ↓
-Remotion renders: particles + lyrics + bg → MP4 video
+ffmpeg astats → 3-band energy → assets/energy.json
+     ↓
+Hyperframes composition (index.html + compositions/) → MP4 video
 ```
 
 ## Requirements
 
 - Node.js 18+
-- Remotion 4.x
+- Hyperframes (dev dependency; render must run on a PC — this Android workspace is `noexec`, so native binaries like esbuild/onnxruntime can't run here)
 - ElevenLabs API key (env: `ELEVENLABS_API_KEY`)
+- ffmpeg (for energy band analysis)
 - Internet access (for lyric search and AI image generation)
 
 ## Folder Structure
@@ -57,6 +61,10 @@ songs/<name>/       → per-song input/output
   lyrics-fixed.json → corrected lyrics + timestamps
   theme.json        → vibe analysis + theme config
   bg.jpg            → AI-generated background image
+scripts/            → analyze/build/generate Node scripts
+assets/             → generated: audio.mp3, bg.jpg, energy.json (gitignored)
+compositions/       → generated: lyrics.html sub-composition (gitignored)
+index.html          → generated root composition (gitignored)
 output/<name>.mp4   → rendered video
 ```
 
@@ -64,3 +72,22 @@ output/<name>.mp4   → rendered video
 
 See `.opencode/agents/lyric-video.md` for the orchestrator agent's step-by-step workflow.
 See `.opencode/skills/` for detailed guidance on each phase.
+
+## Local Workflow (on this device)
+
+```bash
+npm run analyze -- songs/<name>     # ffmpeg 3-band energy → assets/energy.json
+npm run generate -- songs/<name>    # build index.html + compositions/lyrics.html
+npm run check                       # JSON schema checks (no native binaries)
+# Render (PC only):
+npx hyperframes lint
+npx hyperframes render --output output/<name>.mp4
+```
+
+## Hyperframes Model Notes
+
+- Plain HTML compositions with `data-composition-id`, `data-start`, `data-duration`, `data-width/height`, `data-track-index`; media (`<audio>`, `<video>`) playback owned by the framework.
+- Animation = GSAP timelines registered on `window.__timelines["<composition-id>"]` (paused; framework seeks/plays them).
+- Sub-compositions referenced via `data-composition-src`.
+- Audio reactivity is precomputed (no live WebAudio during capture): ffmpeg 3-band analysis → `assets/energy.json`, baked into the GSAP timeline as `tl.set("#root", {"--bass":...})` per 0.1s, which drives CSS vars used by particle `calc()`.
+- `vendor/gsap.min.js` is vendored (npm install fails on Android due to `noexec`).

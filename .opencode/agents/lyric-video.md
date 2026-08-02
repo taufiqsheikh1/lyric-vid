@@ -48,15 +48,33 @@ Extract the `words` array from the response. Filter to only `type: "word"` entri
 wget -q "https://image.pollinations.ai/prompt/$(echo '<PROMPT>' | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')?width=1920&height=1080&nologo=true" -O "songs/<folder>/bg.jpg"
 ```
 
-### Step 5: Generate source files and render
-1. Copy the song's `lyrics-fixed.json` content into `src/data/syncedLyrics.ts` as the exported array.
-2. Copy the song's `theme.json` content into `src/data/themeConfig.ts` as the exported object.
-3. Copy `songs/<folder>/bg.jpg` to `public/bg.jpg`.
-4. Copy `songs/<folder>/audio.mp3` to `public/audio.mp3`.
-5. Render the video:
+### Step 5: Analyze audio, generate composition, and render
+1. Analyze the audio into energy bands (bass/mid/high) at 10 Hz for audio reactivity:
 ```bash
-npx remotion render src/index.ts LyricVideo "output/<folder>.mp4"
+npm run analyze -- songs/<folder>
 ```
+   - Reads `songs/<folder>/audio.mp3`, writes `assets/energy.json` via ffmpeg `astats` (3 bands).
+2. Generate the Hyperframes composition from the song's pipeline data:
+```bash
+npm run generate -- songs/<folder>
+```
+   - Reads `songs/<folder>/lyrics-fixed.json`, `theme.json`, `audio.mp3`, `bg.jpg` + `assets/energy.json`.
+   - Writes `index.html` (root composition), `compositions/lyrics.html` (lyrics sub-composition), `meta.json`; copies assets to `assets/`.
+3. Lint the generated composition (validates schema offline):
+```bash
+npx hyperframes lint
+```
+4. Render the video (requires a PC — noexec workspace cannot run native binaries):
+```bash
+npx hyperframes render --output "output/<folder>.mp4"
+```
+
+Notes on the generated HTML model:
+- Root element has `data-composition-id="root"`, `data-width/height`, `data-duration`.
+- Media: `<audio data-track-index="0">`; layers use `data-track-index` 1-4 for bg image, overlay, particles, lyrics host.
+- All animation is GSAP timelines registered as `window.__timelines["<composition-id>"]` (paused; framework drives playback).
+- Audio reactivity is precomputed into `assets/energy.json` and baked into the timeline as `tl.set("#root", {"--bass":...})` per 0.1s — never use live WebAudio during capture.
+- Lyrics sub-composition is referenced via `data-composition-src="compositions/lyrics.html"` on a host div.
 
 ## Important
 - Always confirm the song title/artist with the user before Step 2 to get better lyric search results.

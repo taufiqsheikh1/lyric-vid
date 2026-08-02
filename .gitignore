@@ -1,7 +1,8 @@
 node_modules/
-dist/
 output/
-public/audio.mp3
-public/bg.jpg
 .cache/
 .remotion/
+assets/
+compositions/
+index.html
+meta.json
