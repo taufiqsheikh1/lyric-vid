@@ -85,6 +85,7 @@ lyric-vid/
 ├── index.html                 # Generated root composition (gitignored)
 ├── vendor/gsap.min.js         # Vendored GSAP (npm install fails on Android noexec)
 ├── output/                    # Rendered .mp4 files
+├── docs/                      # Dev plans (e.g. PC render verification)
 └── .opencode/                 # OpenCode agent & skill configs
     ├── agents/lyric-video.md  # Orchestrator agent (5-step pipeline)
     └── skills/                # song-analysis, lyric-fixing, theme-design
@@ -94,7 +95,7 @@ lyric-vid/
 
 | Component | Technology |
 |-----------|-----------|
-| Video rendering | [Hyperframes](https://github.com/iamdotnet/hyperframes) (HTML + GSAP, no Chromium bundle) |
+| Video rendering | [Hyperframes](https://github.com/iamdotnet/hyperframes) (HTML + GSAP compositions, captured in headless Chrome) |
 | Speech-to-text | [ElevenLabs scribe_v2](https://elevenlabs.io) |
 | Background images | [Pollinations.ai](https://pollinations.ai) (free) |
 | Lyric fixing | Web search + word alignment |
@@ -107,6 +108,7 @@ lyric-vid/
 - [OpenCode](https://opencode.ai) installed
 - ElevenLabs API key (free tier works)
 - ffmpeg
+- Chrome for rendering (hyperframes auto-downloads `chrome-headless-shell` on first render, or set `HYPERFRAMES_BROWSER_PATH` to a system Chrome)
 - Internet access
 
 ## License
