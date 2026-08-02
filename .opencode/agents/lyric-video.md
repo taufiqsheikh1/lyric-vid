@@ -51,7 +51,7 @@ wget -q "https://image.pollinations.ai/prompt/$(echo '<PROMPT>' | python3 -c 'im
 ### Step 5: Analyze audio, generate composition, and render
 1. Analyze the audio into energy bands (bass/mid/high) at 10 Hz for audio reactivity:
 ```bash
-npm run analyze -- songs/<folder>
+npm run analyze -- --input songs/<folder>/audio.mp3
 ```
    - Reads `songs/<folder>/audio.mp3`, writes `assets/energy.json` via ffmpeg `astats` (3 bands).
 2. Generate the Hyperframes composition from the song's pipeline data:

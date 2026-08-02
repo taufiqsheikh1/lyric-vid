@@ -76,7 +76,7 @@ See `.opencode/skills/` for detailed guidance on each phase.
 ## Local Workflow (on this device)
 
 ```bash
-npm run analyze -- songs/<name>     # ffmpeg 3-band energy → assets/energy.json
+npm run analyze -- --input songs/<name>/audio.mp3   # ffmpeg 3-band energy → assets/energy.json
 npm run generate -- songs/<name>    # build index.html + compositions/lyrics.html
 npm run check                       # JSON schema checks (no native binaries)
 # Render (PC only):
