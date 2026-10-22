@@ -1,0 +1,25 @@
+{
+  "name": "agentic-threejs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic agentic Three.js lyric video pipeline (frame-stepped render, high444 master, vast.ai final)",
+  "scripts": {
+    "build:player": "node scripts/build-player.mjs",
+    "render": "node render/render.mjs",
+    "render:draft": "node render/render.mjs --profile draft",
+    "render:final": "node render/render.mjs --profile final",
+    "filmstrip": "node render/filmstrip.mjs",
+    "review": "node review/serve.mjs",
+    "analyze": "node scripts/analyze-audio.mjs",
+    "lyrics": "node scripts/caption-to-lyrics.mjs",
+    "align": "node scripts/align-lyrics.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.48.0",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

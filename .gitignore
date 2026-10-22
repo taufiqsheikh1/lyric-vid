@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+# render artifacts
+player/dist/
+frames/
+output/
+*.mp4
+filmstrip*.png
+# per-song inputs + generated assets stay local (never publish songs)
+songs/
+# scratch
+.cache/
+tmp/
+# secrets
+.env

@@ -1,0 +1,29 @@
+{
+  "fps": 60,
+  "chrome": {
+    "executablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "channel": "chrome"
+  },
+  "profiles": {
+    "draft": {
+      "width": 854,
+      "height": 480,
+      "fps": 30,
+      "supersample": 1,
+      "postFx": "full",
+      "workers": 2,
+      "video": { "codec": "libx264", "preset": "veryfast", "crf": 20, "pixFmt": "yuv420p" },
+      "audioBitrate": "192k"
+    },
+    "final": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 60,
+      "supersample": 2,
+      "postFx": "full",
+      "workers": 8,
+      "video": { "codec": "libx264", "preset": "veryslow", "crf": 0, "profile": "high444", "pixFmt": "yuv444p" },
+      "audioBitrate": "320k"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Deterministic Three.js Player</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        overflow: hidden;
+      }
+      #gl {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-items: center;
+        gap: 18px;
+        grid-auto-flow: row;
+        align-content: center;
+        background: radial-gradient(circle at 50% 45%, #0a0e1c 0%, #000 70%);
+        color: #9fb4d0;
+        font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+        transition: opacity 0.4s ease;
+      }
+      #boot.done { opacity: 0; pointer-events: none; }
+      #boot .spin {
+        width: 34px;
+        height: 34px;
+        border: 3px solid #1c2740;
+        border-top-color: #4fd1ff;
+        border-radius: 50%;
+        animation: bootspin 0.9s linear infinite;
+      }
+      #boot .msg { letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; }
+      @keyframes bootspin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div id="boot">
+      <div class="spin"></div>
+      <div class="msg">loading scene…</div>
+    </div>
+    <script type="module" src="./dist/player.bundle.js"></script>
+  </body>
+</html>

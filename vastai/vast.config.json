@@ -1,0 +1,13 @@
+{
+  "image": "CHANGE_ME/agentic-threejs:latest",
+  "gpuName": "RTX_4090",
+  "numGpus": 1,
+  "diskGb": 80,
+  "maxDph": 0.6,
+  "bidPrice": null,
+  "query": "gpu_name=RTX_4090 num_gpus=1 verified=true rentable=true direct_port_count>=1 disk_space>=80 inet_down>=200",
+  "sort": "dph+",
+  "label": "agentic-threejs",
+  "workers": 0,
+  "remoteDir": "/work"
+}
